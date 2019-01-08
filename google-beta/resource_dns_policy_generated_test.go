@@ -24,7 +24,7 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-func TestAccDnsManagedZone_dnsManagedZoneBasicExample(t *testing.T) {
+func TestAccDnsPolicy_dnsPolicyBasicExample(t *testing.T) {
 	t.Parallel()
 
 	context := map[string]interface{}{
@@ -34,13 +34,13 @@ func TestAccDnsManagedZone_dnsManagedZoneBasicExample(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
-		CheckDestroy: testAccCheckDnsManagedZoneDestroy,
+		CheckDestroy: testAccCheckDnsPolicyDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDnsManagedZone_dnsManagedZoneBasicExample(context),
+				Config: testAccDnsPolicy_dnsPolicyBasicExample(context),
 			},
 			{
-				ResourceName:      "google_dns_managed_zone.example-zone",
+				ResourceName:      "google_dns_policy.example-policy",
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
@@ -48,26 +48,44 @@ func TestAccDnsManagedZone_dnsManagedZoneBasicExample(t *testing.T) {
 	})
 }
 
-func testAccDnsManagedZone_dnsManagedZoneBasicExample(context map[string]interface{}) string {
+func testAccDnsPolicy_dnsPolicyBasicExample(context map[string]interface{}) string {
 	return Nprintf(`
-resource "google_dns_managed_zone" "example-zone" {
-  name = "example-zone"
-  dns_name = "example-${random_id.rnd.hex}.com."
-  description = "Example DNS zone"
-  labels = {
-    foo = "bar"
+resource "google_dns_policy" "example-policy" {
+  name = "example-policy-%{random_suffix}"
+  enable_inbound_forwarding = true
+
+  alternative_name_server_config {
+    target_name_servers {
+      ipv4_address = "172.16.1.10"
+    }
+    target_name_servers {
+      ipv4_address = "172.16.1.20"
+    }
+  }
+
+  networks {
+    network_url =  "${google_compute_network.network-1.self_link}"
+  }
+  networks {
+    network_url =  "${google_compute_network.network-2.self_link}"
   }
 }
 
-resource "random_id" "rnd" {
-  byte_length = 4
+resource "google_compute_network" "network-1" {
+  name = "network-1-%{random_suffix}"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_network" "network-2" {
+  name = "network-2-%{random_suffix}"
+  auto_create_subnetworks = false
 }
 `, context)
 }
 
-func testAccCheckDnsManagedZoneDestroy(s *terraform.State) error {
+func testAccCheckDnsPolicyDestroy(s *terraform.State) error {
 	for name, rs := range s.RootModule().Resources {
-		if rs.Type != "google_dns_managed_zone" {
+		if rs.Type != "google_dns_policy" {
 			continue
 		}
 		if strings.HasPrefix(name, "data.") {
@@ -76,14 +94,14 @@ func testAccCheckDnsManagedZoneDestroy(s *terraform.State) error {
 
 		config := testAccProvider.Meta().(*Config)
 
-		url, err := replaceVarsForTest(rs, "https://www.googleapis.com/dns/v1beta2/projects/{{project}}/managedZones/{{name}}")
+		url, err := replaceVarsForTest(rs, "https://www.googleapis.com/dns/v1beta2/projects/{{project}}/policies/{{name}}")
 		if err != nil {
 			return err
 		}
 
 		_, err = sendRequest(config, "GET", url, nil)
 		if err == nil {
-			return fmt.Errorf("DnsManagedZone still exists at %s", url)
+			return fmt.Errorf("DnsPolicy still exists at %s", url)
 		}
 	}
 
